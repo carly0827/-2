@@ -4,36 +4,30 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>강의록 자동 필기기</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <main class="wrap">
     <section class="card hero">
       <h1>강의록 자동 필기기</h1>
-      <p class="lead">아이패드 Safari에서 바로 쓰는 빠른 버전</p>
-      <ul class="simple-list">
-        <li>강의록 PDF 업로드</li>
-        <li>전사본 파일 업로드 (json / srt / txt)</li>
-        <li>결과 PDF 다운로드</li>
-      </ul>
+      <p class="lead">아이패드에서 전사문 복붙으로 바로 사용</p>
     </section>
 
     <section class="card">
       <form action="/process" method="post" enctype="multipart/form-data">
-        <label class="label">1) 강의록 PDF</label>
-        <input type="file" name="pdf_file" accept=".pdf" required>
 
-        <label class="label">2) 전사본 파일</label>
-        <input type="file" name="script_file" accept=".json,.srt,.txt" required>
+        <label>
+          <span>강의록 PDF</span>
+          <input type="file" name="pdf" accept=".pdf" required>
+        </label>
 
-        <button class="btn" type="submit">업로드하고 처리하기</button>
+        <label>
+          <span>전사문 (여기에 복붙)</span>
+          <textarea name="transcript_text" rows="10" placeholder="여기에 강의 전사문 전체 붙여넣기"></textarea>
+        </label>
+
+        <button type="submit">필기 PDF 만들기</button>
       </form>
-    </section>
-
-    <section class="card note">
-      <h2>사용 팁</h2>
-      <p>설명 없는 연습문제 페이지만 있는 경우, 전사본과 겹치지 않으면 자동으로 건너뛰도록 설계할 수 있어요.</p>
-      <p>먼저 빠른 버전으로 동작 확인 후, 다음에 옆 여백 메모형으로 확장하면 돼요.</p>
     </section>
   </main>
 </body>
