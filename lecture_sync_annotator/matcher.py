@@ -4,10 +4,6 @@ import re
 from collections import Counter
 from typing import List
 
-import numpy as np
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
-
 from .models import PageData, PageMatch, TranscriptSegment
 from .utils import clean_text, split_sentences
 
@@ -51,6 +47,10 @@ def match_pages_to_segments(
     top_k: int = 6,
     min_score: float = 0.14,
 ) -> List[PageMatch]:
+    import numpy as np
+    from sentence_transformers import SentenceTransformer
+    from sklearn.metrics.pairwise import cosine_similarity
+
     model = SentenceTransformer(model_name)
     page_texts = [p.text or f"page {p.page_index + 1}" for p in pages]
     seg_texts = [s.text for s in segments]
