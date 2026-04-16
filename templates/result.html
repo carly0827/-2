@@ -1,27 +1,13 @@
 <!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>생성 완료</title>
-  <link rel="stylesheet" href="/static/style.css">
-</head>
+<html>
 <body>
-  <main class="wrap">
-    <section class="card hero">
-      <h1>생성 완료</h1>
-      <p class="lead">결과 파일을 바로 내려받을 수 있어요.</p>
-    </section>
 
-    <section class="card">
-      <p><strong>PDF:</strong> {{ pdf_name }}</p>
-      <p><strong>전사본:</strong> {{ transcript_name }}</p>
-      <div class="actions">
-        <a class="button" href="/download/{{ run_id }}">annotated_notes.pdf 다운로드</a>
-        <a class="button secondary" href="/download-json/{{ run_id }}">page_matches.json 다운로드</a>
-      </div>
-      <p class="hint">다시 만들려면 뒤로 가기 후 새 파일을 올리면 돼요.</p>
-    </section>
-  </main>
+<h1>완료</h1>
+
+<p>{{ pdf_name }}</p>
+<p>{{ transcript_name }}</p>
+
+<a href="/download/{{ run_id }}">PDF 다운로드</a>
+
 </body>
 </html>
