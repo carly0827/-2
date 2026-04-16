@@ -1,147 +1,39 @@
-from __future__ import annotations
+from flask import Flask, render_template, request, send_file
+import os
 
-import shutil
-import uuid
-from pathlib import Path
+app = Flask(__name__)
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+UPLOAD_DIR = "uploads"
+RESULT_DIR = "results"
 
-from lecture_sync_annotator.pdf_parser import extract_pages
-from lecture_sync_annotator.transcript_loader import load_transcript
-from lecture_sync_annotator.matcher import match_pages_to_segments
-from lecture_sync_annotator.notes import build_side_notes, build_bottom_summary
-from lecture_sync_annotator.figure_notes import build_figure_notes
-from lecture_sync_annotator.renderer import render_study_pdf
-from lecture_sync_annotator.filtering import apply_skip_rules
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(RESULT_DIR, exist_ok=True)
 
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-RUNS_DIR = DATA_DIR / "runs"
-RUNS_DIR.mkdir(parents=True, exist_ok=True)
+@app.route("/")
+def index():
+    return render_template("index.html")
 
-app = FastAPI()
+@app.route("/process", methods=["POST"])
+def process():
+    pdf_file = request.files.get("pdf_file")
+    script_file = request.files.get("script_file")
 
-static_dir = BASE_DIR / "static"
-if static_dir.exists():
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    if not pdf_file or not script_file:
+        return "파일이 누락되었습니다.", 400
 
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+    pdf_path = os.path.join(UPLOAD_DIR, pdf_file.filename)
+    script_path = os.path.join(UPLOAD_DIR, script_file.filename)
 
-ALLOWED_PDF = {".pdf"}
-ALLOWED_TRANSCRIPT = {".json", ".srt", ".txt"}
+    pdf_file.save(pdf_path)
+    script_file.save(script_path)
 
+    result_path = os.path.join(RESULT_DIR, "result.txt")
+    with open(result_path, "w", encoding="utf-8") as f:
+        f.write("업로드 성공!\n")
+        f.write(f"PDF: {pdf_file.filename}\n")
+        f.write(f"전사본: {script_file.filename}\n")
 
-def _safe_suffix(name: str) -> str:
-    return Path(name).suffix.lower().strip()
+    return send_file(result_path, as_attachment=True)
 
-
-@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
-async def index(request: Request):
-    return templates.TemplateResponse(
-        request=request,
-        name="index.html",
-        context={}
-    )
-
-
-@app.post("/process", response_class=HTMLResponse)
-async def process(
-    request: Request,
-    pdf: UploadFile = File(...),
-    transcript: UploadFile = File(...),
-):
-    pdf_suffix = _safe_suffix(pdf.filename or "")
-    transcript_suffix = _safe_suffix(transcript.filename or "")
-
-    if pdf_suffix not in ALLOWED_PDF:
-        raise HTTPException(status_code=400, detail="PDF 파일만 업로드할 수 있어요.")
-    if transcript_suffix not in ALLOWED_TRANSCRIPT:
-        raise HTTPException(status_code=400, detail="전사본은 json / srt / txt만 가능해요.")
-
-    run_id = uuid.uuid4().hex[:12]
-    run_dir = RUNS_DIR / run_id
-    uploads_dir = run_dir / "uploads"
-    output_dir = run_dir / "output"
-
-    uploads_dir.mkdir(parents=True, exist_ok=True)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    pdf_path = uploads_dir / f"input{pdf_suffix}"
-    transcript_path = uploads_dir / f"transcript{transcript_suffix}"
-
-    with pdf_path.open("wb") as f:
-        shutil.copyfileobj(pdf.file, f)
-
-    with transcript_path.open("wb") as f:
-        shutil.copyfileobj(transcript.file, f)
-
-    pages = extract_pages(pdf_path)
-    segments = load_transcript(transcript_path)
-    matches = match_pages_to_segments(pages, segments)
-
-    page_map = {p.page_index: p for p in pages}
-
-    for match in matches:
-        page = page_map[match.page_index]
-        match.is_skipped = apply_skip_rules(page, match)
-
-    for match in matches:
-        page = page_map[match.page_index]
-        match.side_notes = build_side_notes(page, match)
-        match.figure_notes = build_figure_notes(page, match)
-        match.bottom_summary = build_bottom_summary(match)
-
-        if not hasattr(match, "raw_transcript") or match.raw_transcript is None:
-            if hasattr(match, "matched_segments") and match.matched_segments:
-                match.raw_transcript = " ".join(seg.text for seg in match.matched_segments)
-            else:
-                match.raw_transcript = ""
-
-    render_study_pdf(
-        source_pdf=pdf_path,
-        pages=pages,
-        matches=matches,
-        outdir=output_dir,
-    )
-
-    return templates.TemplateResponse(
-        request=request,
-        name="result.html",
-        context={
-            "run_id": run_id,
-            "pdf_name": pdf.filename or "input.pdf",
-            "transcript_name": transcript.filename or "transcript.txt",
-        },
-    )
-
-
-@app.get("/download/{run_id}")
-async def download_pdf(run_id: str):
-    pdf_path = RUNS_DIR / run_id / "output" / "annotated_notes.pdf"
-    if not pdf_path.exists():
-        raise HTTPException(status_code=404, detail="결과 PDF를 찾지 못했어요.")
-    return FileResponse(
-        path=pdf_path,
-        filename="annotated_notes.pdf",
-        media_type="application/pdf",
-    )
-
-
-@app.get("/download-json/{run_id}")
-async def download_json(run_id: str):
-    json_path = RUNS_DIR / run_id / "output" / "page_matches.json"
-    if not json_path.exists():
-        raise HTTPException(status_code=404, detail="결과 JSON을 찾지 못했어요.")
-    return FileResponse(
-        path=json_path,
-        filename="page_matches.json",
-        media_type="application/json",
-    )
-
-
-@app.get("/health")
-async def health():
-    return {"ok": True}
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
