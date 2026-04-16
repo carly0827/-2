@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import shutil
@@ -6,7 +5,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -24,7 +23,11 @@ RUNS_DIR = DATA_DIR / "runs"
 RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="Lecture Sync Annotator Web")
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+
+static_dir = BASE_DIR / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 ALLOWED_PDF = {".pdf"}
@@ -70,28 +73,33 @@ async def process(request: Request, pdf: UploadFile = File(...), transcript: Upl
     matches = match_pages_to_segments(pages, segments)
 
     page_map = {p.page_index: p for p in pages}
+
     skip_exercise_pages = True
     if skip_exercise_pages:
         for match in matches:
             page = page_map[match.page_index]
             match.is_skipped = apply_skip_rules(page, match)
 
-    side_notes = [build_side_notes(page_map[m.page_index], m) for m in matches]
-    figure_notes = [build_figure_notes(page_map[m.page_index], m) for m in matches]
-    bottom_summary = [build_bottom_summary(m) for m in matches]
+    # renderer.py가 각 match 안에서 side_notes, figure_notes, bottom_summary를 읽으므로
+    # 여기서 각 match 객체에 직접 넣어준다.
+    for match in matches:
+        page = page_map[match.page_index]
+        match.side_notes = build_side_notes(page, match)
+        match.figure_notes = build_figure_notes(page, match)
+        match.bottom_summary = build_bottom_summary(match)
 
-    pdf_out = output_dir / "annotated_notes.pdf"
-    json_out = output_dir / "page_matches.json"
+        # renderer.py가 raw_transcript를 기대할 수 있으므로 안전하게 넣어둔다.
+        if not hasattr(match, "raw_transcript") or match.raw_transcript is None:
+            if hasattr(match, "matched_segments") and match.matched_segments:
+                match.raw_transcript = " ".join(seg.text for seg in match.matched_segments)
+            else:
+                match.raw_transcript = ""
 
-    render_study_pdf(
+    pdf_out, json_out = render_study_pdf(
         source_pdf=pdf_path,
         pages=pages,
         matches=matches,
-        side_notes=side_notes,
-        figure_notes=figure_notes,
-        bottom_summaries=bottom_summary,
-        output_pdf=pdf_out,
-        output_json=json_out,
+        outdir=output_dir,
     )
 
     return templates.TemplateResponse(
@@ -124,8 +132,3 @@ async def download_json(run_id: str):
 @app.get("/health")
 async def health():
     return {"ok": True}
-if __name__ == "__main__":
-    import os
-    import uvicorn
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
