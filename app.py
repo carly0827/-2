@@ -4,7 +4,7 @@ import shutil
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -25,17 +25,10 @@ DATA_DIR = BASE_DIR / "data"
 RUNS_DIR = DATA_DIR / "runs"
 RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Lecture Sync Annotator")
+app = FastAPI()
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-
-ALLOWED_PDF = {".pdf"}
-ALLOWED_TRANSCRIPT = {".json", ".srt", ".txt"}
-
-
-def _safe_suffix(name: str) -> str:
-    return Path(name).suffix.lower().strip()
 
 
 # -------------------------------
@@ -47,22 +40,14 @@ async def index(request: Request):
 
 
 # -------------------------------
-# 처리
+# 처리 (텍스트 복붙 버전)
 # -------------------------------
 @app.post("/process", response_class=HTMLResponse)
 async def process(
     request: Request,
     pdf: UploadFile = File(...),
-    transcript: UploadFile = File(...)
+    transcript_text: str = Form(...)
 ):
-    pdf_suffix = _safe_suffix(pdf.filename or "")
-    transcript_suffix = _safe_suffix(transcript.filename or "")
-
-    if pdf_suffix not in ALLOWED_PDF:
-        raise HTTPException(status_code=400, detail="PDF만 가능")
-    if transcript_suffix not in ALLOWED_TRANSCRIPT:
-        raise HTTPException(status_code=400, detail="전사본 형식 오류")
-
     run_id = uuid.uuid4().hex[:12]
     run_dir = RUNS_DIR / run_id
     uploads_dir = run_dir / "uploads"
@@ -71,18 +56,21 @@ async def process(
     uploads_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    pdf_path = uploads_dir / f"input{pdf_suffix}"
-    transcript_path = uploads_dir / f"transcript{transcript_suffix}"
+    pdf_path = uploads_dir / "input.pdf"
+    transcript_path = uploads_dir / "transcript.txt"
 
+    # PDF 저장
     with pdf_path.open("wb") as f:
         shutil.copyfileobj(pdf.file, f)
 
-    with transcript_path.open("wb") as f:
-        shutil.copyfileobj(transcript.file, f)
+    # 텍스트 저장
+    if not transcript_text.strip():
+        raise HTTPException(status_code=400, detail="전사문을 입력해주세요")
 
-    # -------------------------------
-    # 핵심 처리
-    # -------------------------------
+    with transcript_path.open("w", encoding="utf-8") as f:
+        f.write(transcript_text)
+
+    # 기존 로직
     pages = extract_pages(pdf_path)
     segments = load_transcript(transcript_path)
     matches = match_pages_to_segments(pages, segments)
@@ -109,7 +97,7 @@ async def process(
             "request": request,
             "run_id": run_id,
             "pdf_name": pdf.filename,
-            "transcript_name": transcript.filename,
+            "transcript_name": "텍스트 입력",
         },
     )
 
@@ -121,7 +109,7 @@ async def process(
 async def download_pdf(run_id: str):
     pdf_path = RUNS_DIR / run_id / "output" / "annotated_notes.pdf"
     if not pdf_path.exists():
-        raise HTTPException(status_code=404, detail="파일 없음")
+        raise HTTPException(status_code=404)
     return FileResponse(pdf_path, filename="annotated_notes.pdf")
 
 
@@ -129,16 +117,8 @@ async def download_pdf(run_id: str):
 async def download_json(run_id: str):
     json_path = RUNS_DIR / run_id / "output" / "page_matches.json"
     if not json_path.exists():
-        raise HTTPException(status_code=404, detail="파일 없음")
+        raise HTTPException(status_code=404)
     return FileResponse(json_path, filename="page_matches.json")
-
-
-# -------------------------------
-# health check
-# -------------------------------
-@app.get("/health")
-async def health():
-    return {"ok": True}
 
 
 # -------------------------------
