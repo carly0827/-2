@@ -4,31 +4,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>강의록 자동 필기기</title>
-  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <main class="wrap">
-    <section class="card hero">
-      <h1>강의록 자동 필기기</h1>
-      <p class="lead">아이패드에서 전사문 복붙으로 바로 사용</p>
-    </section>
+  <h1>강의록 자동 필기기</h1>
 
-    <section class="card">
-      <form action="/process" method="post" enctype="multipart/form-data">
+  <form action="/process" method="post" enctype="multipart/form-data">
 
-        <label>
-          <span>강의록 PDF</span>
-          <input type="file" name="pdf" accept=".pdf" required>
-        </label>
+    <p>PDF 업로드</p>
+    <input type="file" name="pdf" required>
 
-        <label>
-          <span>전사문 (여기에 복붙)</span>
-          <textarea name="transcript_text" rows="10" placeholder="여기에 강의 전사문 전체 붙여넣기"></textarea>
-        </label>
+    <p>전사문 복붙</p>
+    <textarea name="transcript_text" rows="10" style="width:100%;"></textarea>
 
-        <button type="submit">필기 PDF 만들기</button>
-      </form>
-    </section>
-  </main>
+    <br><br>
+    <button type="submit">생성</button>
+
+  </form>
 </body>
 </html>
